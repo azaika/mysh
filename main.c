@@ -32,7 +32,7 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
-    printf("mysh: byebye 👋");
+    printf("mysh: byebye 👋\n");
 
     return EXIT_SUCCESS;
 }
