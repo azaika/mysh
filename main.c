@@ -6,9 +6,33 @@ int mysh_init(void) {
     return 0;
 }
 
+int is_terminal_char(char c) {
+    return c == '\n' || c == EOF;
+}
+
 int mysh_read_line(char* buf, size_t buf_size) {
-    buf[0] = getchar();
-    buf[1] = 0;
+    size_t cur = 0;
+    while (1) {
+        char c = getchar();
+
+        if (cur + 1 == buf_size && !is_terminal_char(c)) {
+            fprintf(stderr, "mysh: input must be less than 8096 bytes.");
+            while (!is_terminal_char(c)) {
+                c = getchar();
+            }
+            
+            return 1;
+        }
+
+        if (is_terminal_char(c)) {
+            buf[cur] = '\0';
+            break;
+        }
+        
+        buf[cur] = c;
+        ++cur;
+    }
+    
     return 0;
 }
 
@@ -24,12 +48,13 @@ int mysh_loop(void) {
     int status = 1;
     do {
         printf("> ");
-        int read_err = mysh_reasd_line(input_buf, MAX_INPUT_BYTES);
+        int read_err = mysh_read_line(input_buf, MAX_INPUT_BYTES);
         if (read_err) {
-            fprintf(stderr, "mysh: error occurred while reading input.\n");
-            status = 1;
-            break;
+            fprintf(stderr, "mysh: error occurred while reading input (input ignored).\n");
+            continue;
         }
+
+        puts(input_buf);
     } while(status);
 
     free(input_buf);
