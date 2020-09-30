@@ -121,6 +121,9 @@ int mysh_cd(char** args) {
 	if (err) {
 		perror("mysh");
 	}
+	else {
+		current_shell_directory = get_current_dir_name();
+	}
 
     return 1;
 }
@@ -163,7 +166,7 @@ int mysh_loop(void) {
 
 	int status = 1;
 	do {
-		printf("> ");
+		printf("%s$ ", current_shell_directory);
 		int read_err = mysh_read_line(input_buf, MYSH_MAX_INPUT_BYTES);
 		if (read_err) {
 			fprintf(stderr, "mysh: error occurred while reading input (input ignored).\n");
