@@ -1,11 +1,19 @@
+#define _GNU_SOURCE
+
+// standard library
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+// unix header
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
+char* current_shell_directory = NULL;
+
 int mysh_init(void) {
+	current_shell_directory = get_current_dir_name();
 	return 0;
 }
 
@@ -105,7 +113,15 @@ int mysh_launch(char** args) {
 }
 
 int mysh_cd(char** args) {
-    puts("cd()");
+	if (args[1] == NULL) {
+		return 1;
+	}
+
+	int err = chdir(args[1]);
+	if (err) {
+		perror("mysh");
+	}
+
     return 1;
 }
 int mysh_exit(char** args) {
@@ -166,6 +182,7 @@ int mysh_loop(void) {
 }
 
 int mysh_terminate(void) {
+	free(current_shell_directory);
 	return 0;
 }
 
