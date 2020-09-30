@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 int mysh_init(void) {
 	return 0;
@@ -77,13 +80,37 @@ const char* builtin_str[] = {
     "exit"
 };
 
+int mysh_launch(char** args) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("mysh");
+    }
+    else if (pid == 0) { // child
+        if (execvp(args[0], args) == -1) {
+            perror("mysh");
+        }
+
+        exit(EXIT_FAILURE);
+    }
+    else {
+        // parent
+
+        int status;
+        do {
+            waitpid(pid, &status, WUNTRACED);
+        } while(!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
+
+    return 1;
+}
+
 int mysh_cd(char** args) {
     puts("cd()");
-    return 0;
+    return 1;
 }
 int mysh_exit(char** args) {
     puts("exit()");
-    return 0;
+    return 1;
 }
 
 int (*const builtin_func[]) (char**) = {
@@ -93,6 +120,20 @@ int (*const builtin_func[]) (char**) = {
 
 int mysh_num_builtins() {
     return sizeof(builtin_str) / sizeof(char*);
+}
+
+int mysh_execute(char** args) {
+    if (args == NULL || args[0] == NULL) {
+        return 0;
+    }
+
+    for (int i = 0; i < mysh_num_builtins(); ++i) {
+        if (strcmp(args[0], builtin_str[i]) == 0) {
+            return (*builtin_func[i])(args);
+        }
+    }
+
+    return mysh_launch(args);
 }
 
 #define MYSH_MAX_INPUT_BYTES (8096)
@@ -115,9 +156,7 @@ int mysh_loop(void) {
 
         char** args = mysh_split_line(input_buf);
 
-        for (int i = 0; args[i] != NULL; ++i) {
-            puts(args[i]);
-        }
+        status = mysh_execute(args);
 
         free(args);
 	} while(status);
