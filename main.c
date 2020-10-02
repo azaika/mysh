@@ -1,5 +1,3 @@
-#define _GNU_SOURCE
-
 // standard library
 #include <stdlib.h>
 #include <stdio.h>
@@ -10,47 +8,12 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-char* current_shell_directory = NULL;
+#include "parser.h"
+#include "shell_resource.h"
+#include "builtins.h"
 
 int mysh_init(void) {
-	current_shell_directory = get_current_dir_name();
-	return 0;
-}
-
-// caller must free() return value
-char** mysh_split_line(char* line) {
-    const int num_args_unit = 32;
-    const char* delims = " \t\r\n\a";
-
-	int buf_size = num_args_unit;
-	int pos = 0;
-
-	char** args = malloc(buf_size * sizeof(char*));
-	if (!args) {
-		fprintf(stderr, "mysh: error occurred in allocation.\n");
-		exit(EXIT_FAILURE);
-	}
-
-	char* arg = strtok(line, delims);
-	while (arg != NULL) {
-		args[pos] = arg;
-		++pos;
-
-		if (pos >= buf_size) {
-			buf_size += num_args_unit;
-			args = realloc(args, buf_size * sizeof(char*));
-			if (!args) {
-				fprintf(stderr, "mysh: error occurred in allocation.\n");
-				exit(EXIT_FAILURE);
-			}
-		}
-
-        arg = strtok(NULL, delims);
-	}
-
-    args[pos] = NULL;
-
-    return args;
+	return mysh_init_resource();
 }
 
 int is_terminal_char(char c) {
@@ -83,11 +46,6 @@ int mysh_read_line(char* buf, size_t buf_size) {
 	return 0;
 }
 
-const char* builtin_str[] = {
-    "cd",
-    "exit"
-};
-
 int mysh_launch(char** args) {
     pid_t pid = fork();
     if (pid < 0) {
@@ -109,36 +67,7 @@ int mysh_launch(char** args) {
         } while(!WIFEXITED(status) && !WIFSIGNALED(status));
     }
 
-    return 1;
-}
-
-int mysh_cd(char** args) {
-	if (args[1] == NULL) {
-		return 1;
-	}
-
-	int err = chdir(args[1]);
-	if (err) {
-		perror("mysh");
-	}
-	else {
-		current_shell_directory = get_current_dir_name();
-	}
-
-    return 1;
-}
-int mysh_exit(char** args) {
-    puts("exit()");
-    return 1;
-}
-
-int (*const builtin_func[]) (char**) = {
-    mysh_cd,
-    mysh_exit
-};
-
-int mysh_num_builtins() {
-    return sizeof(builtin_str) / sizeof(char*);
+    return 0;
 }
 
 int mysh_execute(char** args) {
@@ -164,9 +93,9 @@ int mysh_loop(void) {
 		exit(EXIT_FAILURE);
 	}
 
-	int status = 1;
+	int status = 0;
 	do {
-		printf("%s$ ", current_shell_directory);
+		printf("%s$ ", *mysh_shell_dir());
 		int read_err = mysh_read_line(input_buf, MYSH_MAX_INPUT_BYTES);
 		if (read_err) {
 			fprintf(stderr, "mysh: error occurred while reading input (input ignored).\n");
@@ -178,15 +107,14 @@ int mysh_loop(void) {
         status = mysh_execute(args);
 
         free(args);
-	} while(status);
+	} while(status == 0);
 
 	free(input_buf);
 	return status;
 }
 
 int mysh_terminate(void) {
-	free(current_shell_directory);
-	return 0;
+	return mysh_release_resource();
 }
 
 int main(void) {
