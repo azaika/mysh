@@ -11,6 +11,16 @@ typedef struct {
     size_t capacity;
 } mysh_string;
 
+static void ms_extend(mysh_string* s, size_t size) {
+    assert(s != NULL);
+
+    while (s->capacity < size) {
+        s->capacity *= 2;
+    }
+    
+    s->ptr = realloc(s->ptr, s->capacity * sizeof(char));
+}
+
 static void ms_init(mysh_string* s, const char* src) {
     if (s == NULL || src == NULL)
         return;
@@ -30,19 +40,30 @@ static void ms_init(mysh_string* s, const char* src) {
 }
 
 static void ms_assign(mysh_string* s1, const mysh_string* s2) {
+    assert(s1 != NULL);
+
     if (s1->ptr == NULL) {
         ms_init(s1, s2->ptr);
         return;
     }
-    
-    while (s1->capacity < s2->length) {
-        s1->capacity *= 2;
-    }
 
-    s1->ptr = realloc(s1->ptr, s1->capacity * sizeof(char));
+    ms_extend(s1, s2->length);
     s1->length = s2->length;
 
     strcpy(s1->ptr, s2->ptr);
+}
+
+static void ms_assign_raw(mysh_string* str, const char* src) {
+    if (str->ptr == NULL) {
+        ms_init(str, src);
+        return;
+    }
+
+    size_t len = strlen(src) + 1;
+    ms_extend(str, len);
+    str->length = len;
+
+    strcpy(str->ptr, src);
 }
 
 static size_t ms_reserve(mysh_string* s, size_t new_cap) {

@@ -38,8 +38,7 @@ int mysh_cd(char** args) {
 		perror("mysh");
 	}
 	else {
-        char** p = mysh_shell_dir();
-        *p = get_current_dir_name();
+        mysh_set_curdir_name(get_current_dir_name());
 	}
 
     return 0;

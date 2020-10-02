@@ -95,7 +95,7 @@ int mysh_loop(void) {
 
 	int status = 0;
 	do {
-		printf("%s$ ", *mysh_shell_dir());
+		printf("%s$ ", mysh_get_shell_curdir());
 		int read_err = mysh_read_line(input_buf, MYSH_MAX_INPUT_BYTES);
 		if (read_err) {
 			fprintf(stderr, "mysh: error occurred while reading input (input ignored).\n");
