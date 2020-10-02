@@ -58,9 +58,7 @@ int mysh_launch(char** args) {
 
         exit(EXIT_FAILURE);
     }
-    else {
-        // parent
-
+    else { // parent
         int status;
         do {
             waitpid(pid, &status, WUNTRACED);
@@ -110,7 +108,7 @@ int mysh_loop(void) {
 	} while(status == 0);
 
 	free(input_buf);
-	return status;
+	return 0;
 }
 
 int mysh_terminate(void) {

@@ -44,8 +44,7 @@ int mysh_cd(char** args) {
     return 0;
 }
 int mysh_exit(char** args) {
-    puts("exit()");
-    return 0;
+    return 1;
 }
 
 #endif // MYSH_BUILTINS_H
