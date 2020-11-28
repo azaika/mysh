@@ -56,6 +56,20 @@ static void ms_init(mysh_string* str, const char* src) {
     strcpy(str->ptr, src);
 }
 
+static mysh_string* ms_new() {
+    mysh_string* s = (mysh_string*)malloc(sizeof(mysh_string));
+    if (s == NULL) {
+        fprintf(stderr, "mysh: error occurred in allocation.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    s->ptr = NULL;
+    s->length = 0;
+    s->capacity = 0;
+
+    return s;
+}
+
 static void ms_assign(mysh_string* s1, const mysh_string* s2) {
     assert(s1 != NULL);
 
@@ -115,7 +129,10 @@ static void ms_clear(mysh_string* s) {
 static void ms_relase(mysh_string* s) {
     assert(s != NULL);
 
-    free(s->ptr);
+    if (s->ptr != NULL) {
+        free(s->ptr);
+    }
+    
     s->ptr = NULL;
     s->length = 0;
     s->capacity = 0;
