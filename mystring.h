@@ -1,6 +1,7 @@
 #ifndef MYSH_MYSTRING_H
 #define MYSH_MYSTRING_H
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -132,10 +133,15 @@ static void ms_relase(mysh_string* s) {
     if (s->ptr != NULL) {
         free(s->ptr);
     }
-    
+
     s->ptr = NULL;
     s->length = 0;
     s->capacity = 0;
+}
+
+static void ms_free(mysh_string* s) {
+    ms_relase(s);
+    free(s);
 }
 
 static void ms_push(mysh_string* s, char c) {
@@ -153,7 +159,7 @@ static void ms_push(mysh_string* s, char c) {
     ++s->length;
 }
 
-static void ms_concat(mysh_string* s1, const mysh_string* s2) {
+static void ms_append(mysh_string* s1, const mysh_string* s2) {
     assert(s1 != NULL && s2 != NULL);
 
     if (s2->ptr == NULL) {
@@ -171,7 +177,7 @@ static void ms_concat(mysh_string* s1, const mysh_string* s2) {
     s1->length += s2->length;
 }
 
-static void ms_concat_raw(mysh_string* str, const char* src) {
+static void ms_append_raw(mysh_string* str, const char* src) {
     assert(str != NULL && src != NULL);
 
     if (str->ptr == NULL) {
