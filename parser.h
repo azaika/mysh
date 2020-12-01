@@ -123,11 +123,11 @@ static char mysh_parse_escaped(mysh_parser* parser, bool ignore_last) {
 static const char* mysh_expand_env(mysh_parser* parser) {
 	mysh_string* var_name = ms_new();
 	ms_init(var_name, "");
-	
+
 	char c = mysh_consume(parser);
 	while (isalnum(c) || c == '_') {
 		ms_push(var_name, c);
-		mysh_consume(parser);
+		c = mysh_consume(parser);
 	}
 
 	return getenv(var_name->ptr);
