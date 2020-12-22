@@ -13,6 +13,7 @@
 typedef enum {
 	token_string,
 	token_jobcontrol,
+	token_pipe,
 	token_redirect
 } mysh_token;
 
@@ -36,6 +37,9 @@ void free_parsed_component(mysh_parsed_component* com) {
 	}
 	if (com->token == token_jobcontrol) {
 		ms_free(com->data);
+	}
+	if (com->token == token_pipe) {
+		// do nothing
 	}
 	if (com->token == token_redirect) {
 		ms_free(((mysh_redirect_component*)com->data)->str);
@@ -181,13 +185,26 @@ static mysh_parsed_component* mysh_parse_string(mysh_parser* parser) {
 	return ret;
 }
 
+static mysh_parsed_component* mysh_parse_pipe(mysh_parser* parser) {
+	if (parser->last_char != '|')
+		return NULL;
+	
+	mysh_parsed_component* ret = (mysh_parsed_component*)malloc(sizeof(mysh_parsed_component));
+	if (ret == NULL) {
+		fprintf(stderr, "mysh: error occurred in allocation.\n");
+        exit(EXIT_FAILURE);
+	}
+
+	ret->token = token_pipe;
+	ret->data = NULL;
+
+	return ret;
+}
+
 static mysh_parsed_component* mysh_parse_jobcontrol(mysh_parser* parser) {
 	mysh_string* s = ms_new();
 
 	switch (parser->last_char) {
-		case '|':
-			ms_assign_raw(s, "|");
-			break;
 		case ';':
 			ms_assign_raw(s, ";");
 			break;
@@ -302,7 +319,9 @@ static mysh_parsed_component** mysh_parse_input(char* line) {
 		}
 
 		mysh_parsed_component* com;
-		if (c == '|' || c == ';' || c == '&') {
+		if (c == '|'){
+			com = mysh_parse_pipe(&parser);
+		} if (c == ';' || c == '&') {
 			com = mysh_parse_jobcontrol(&parser);
 		}
 		else if (isdigit(c)) {
