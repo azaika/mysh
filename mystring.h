@@ -193,4 +193,17 @@ static void ms_append_raw(mysh_string* str, const char* src) {
     str->length += len;
 }
 
+static char* ms_into_chars(mysh_string* str) {
+    assert(str != NULL);
+
+    if (str->ptr == NULL) {
+        return NULL;
+    }
+
+    char* ptr = str->ptr;
+    free(str);
+
+    return ptr;
+}
+
 #endif // MYSH_MYSTRING_H
