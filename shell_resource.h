@@ -3,7 +3,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "mystring.h"
 
@@ -14,59 +16,65 @@ typedef struct mysh_resource_tag {
 
 static mysh_resource mysh_shell_resource;
 
-static void mysh_set_curdir_name(const char* name) {
+static void mysh_set_curdir_name(mysh_resource* res, const char* name) {
     if (name == NULL) {
         return;
     }
 
     size_t name_len = strlen(name);
-    if (name_len < mysh_shell_resource.home_dir.length) {
-        ms_assign_raw(&mysh_shell_resource.current_dir, name);
+    if (name_len < res->home_dir.length) {
+        ms_assign_raw(&res->current_dir, name);
         return;
     }
 
     int flag = 1;
     size_t i;
-    for (i = 0; i < mysh_shell_resource.home_dir.length; ++i) {
-        if (name[i] != mysh_shell_resource.home_dir.ptr[i]) {
+    for (i = 0; i < res->home_dir.length; ++i) {
+        if (name[i] != res->home_dir.ptr[i]) {
             flag = 0;
             break;
         }
     }
 
     if (flag) {
-        ms_reserve(&mysh_shell_resource.current_dir, name_len - i + 1);
-        mysh_shell_resource.current_dir.length = name_len - i + 1;
+        ms_reserve(&res->current_dir, name_len - i + 1);
+        res->current_dir.length = name_len - i + 1;
 
-        mysh_shell_resource.current_dir.ptr[0] = '~';
+        res->current_dir.ptr[0] = '~';
         for (size_t j = 0; j < name_len - i; ++j) {
-            mysh_shell_resource.current_dir.ptr[1 + j] = name[i + j];
+            res->current_dir.ptr[1 + j] = name[i + j];
         }
 
-        mysh_shell_resource.current_dir.ptr[name_len - i + 1] = '\0';
+        res->current_dir.ptr[name_len - i + 1] = '\0';
     }
     else {
-        ms_assign_raw(&mysh_shell_resource.current_dir, name);
+        ms_assign_raw(&res->current_dir, name);
     }
 }
 
-static int mysh_init_resource() {
-    int error = 0;
-    ms_init(&mysh_shell_resource.current_dir, "");
-    ms_init(&mysh_shell_resource.home_dir, getenv("HOME"));
-    mysh_set_curdir_name(get_current_dir_name());
+// returns false on error
+static bool mysh_init_resource(mysh_resource* res) {
+    ms_init(&res->current_dir, "");
+    ms_init(&res->home_dir, getenv("HOME"));
 
-    return error;
+    if (errno != 0) {
+        perror("mysh");
+        return false;
+    }
+
+    mysh_set_curdir_name(res, get_current_dir_name());
+
+    if (errno != 0) {
+        perror("mysh");
+        return false;
+    }
+
+    return true;
 }
 
-static int mysh_release_resource() {
-    ms_relase(&mysh_shell_resource.current_dir);
-    ms_relase(&mysh_shell_resource.home_dir);
-    return 0;
-}
-
-static const char* mysh_get_shell_curdir() {
-    return mysh_shell_resource.current_dir.ptr;
+static void mysh_release_resource(mysh_resource* res) {
+    ms_relase(&res->current_dir);
+    ms_relase(&res->home_dir);
 }
 
 #endif // MYSH_SHELL_RESOURCE_H

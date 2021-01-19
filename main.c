@@ -8,12 +8,14 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include <stdbool.h>
+
 #include "parser.h"
 #include "shell_resource.h"
 #include "builtins.h"
 
-int mysh_init(void) {
-	return mysh_init_resource();
+bool mysh_init(mysh_resource* res) {
+	return mysh_init_resource(res);
 }
 
 int is_terminal_char(char c) {
@@ -68,14 +70,14 @@ int mysh_launch(char** args) {
     return 0;
 }
 
-int mysh_execute(char** args) {
+int mysh_execute(mysh_resource* res, char** args) {
     if (args == NULL || args[0] == NULL) {
         return 0;
     }
 
     for (int i = 0; i < mysh_num_builtins(); ++i) {
         if (strcmp(args[0], builtin_str[i]) == 0) {
-            return (*builtin_func[i])(args);
+            return (*builtin_func[i])(res, args);
         }
     }
 
@@ -84,7 +86,7 @@ int mysh_execute(char** args) {
 
 #define MYSH_MAX_INPUT_BYTES (8096)
 
-int mysh_loop(void) {
+int mysh_loop(mysh_resource* res) {
 	char* input_buf = malloc(sizeof(char) * MYSH_MAX_INPUT_BYTES);
 	if (input_buf == NULL) {
 		fprintf(stderr, "mysh: error occurred in allocation.\n");
@@ -93,12 +95,34 @@ int mysh_loop(void) {
 
 	int status = 0;
 	do {
-		printf("%s$ ", mysh_get_shell_curdir());
+		printf("%s$ ", res->current_dir);
 		int read_err = mysh_read_line(input_buf, MYSH_MAX_INPUT_BYTES);
 		if (read_err) {
 			fprintf(stderr, "mysh: error occurred while reading input (input ignored).\n");
 			continue;
 		}
+
+		mysh_tokenized_component** coms = mysh_parse_input(input_buf);
+		if (coms == NULL) {
+			fprintf(stderr, "mysh: parse error (input ignored).\n");
+		}
+		for (int i = 0; coms[i] != NULL; ++i) {
+			if (coms[i]->token == token_string) {
+				printf("token_string: %s\n", ((mysh_string*)coms[i]->data)->ptr);
+			}
+			else if (coms[i]->token == token_jobcontrol) {
+				printf("token_jobcontrol: %s\n", ((mysh_string*)coms[i]->data)->ptr);
+			}
+			else if (coms[i]->token == token_pipe) {
+				printf("token_pipe: |\n");
+			}
+			else {
+				printf("token_redirect: %s\n", ((mysh_redirect_data*)coms[i]->data)->str->ptr);
+			}
+			free_tokenized_component(coms[i]);
+		}
+		free(coms);
+		continue;
 
         char** args = mysh_split_line(input_buf);
 
@@ -111,25 +135,25 @@ int mysh_loop(void) {
 	return 0;
 }
 
-int mysh_terminate(void) {
-	return mysh_release_resource();
+bool mysh_terminate(mysh_resource* res) {
+	mysh_release_resource(res);
+	return true;
 }
 
 int main(void) {
-	int init_err = mysh_init();
-	if (init_err) {
+	mysh_resource res;
+	if (!mysh_init(&res)) {
 		fprintf(stderr, "mysh: error occurred in initialization process.\n");
 		return EXIT_FAILURE;
 	}
 
-	int loop_err = mysh_loop();
+	int loop_err = mysh_loop(&res);
 	if (loop_err) {
 		fprintf(stderr, "mysh: error occurred in loop process.\n");
 		return EXIT_FAILURE;
 	}
 
-	int terminate_err = mysh_terminate();
-	if (terminate_err) {
+	if (!mysh_terminate(&res)) {
 		fprintf(stderr, "mysh: error occurred in loop process.\n");
 		return EXIT_FAILURE;
 	}
