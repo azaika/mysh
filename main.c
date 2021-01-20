@@ -15,7 +15,48 @@
 #include "builtins.h"
 
 bool mysh_init(mysh_resource* res) {
-	return mysh_init_resource(res);
+	ms_init(&res->current_dir, "");
+    ms_init(&res->home_dir, getenv("HOME"));
+
+    if (errno < 0) {
+        perror("mysh: couldn't get $HOME");
+        return false;
+    }
+    
+    res->terminal_fd = STDIN_FILENO;
+    res->is_interactive = isatty(res->terminal_fd);
+
+    if (res->is_interactive) {
+        for (pid_t p = getpgrp(); p != tcgetpgrp(res->terminal_fd); p = getpgrp()) {
+            kill(-res->group_id, SIGTTIN);
+        }
+
+		signal(SIGINT, SIG_IGN);
+		signal(SIGQUIT, SIG_IGN);
+		signal(SIGTSTP, SIG_IGN);
+		signal(SIGTTIN, SIG_IGN);
+		signal(SIGTTOU, SIG_IGN);
+		signal(SIGCHLD, SIG_IGN);
+
+        res->group_id = getpid();
+        if (setpgid(res->group_id, res->group_id) < 0) {
+            perror("mysh: couldn't set the shell in its own process group");
+            return false;
+        }
+
+        if (tcsetpgrp(res->terminal_fd, res->group_id) < -1) {
+            perror("mysh: couldn't make the shell foreground");
+            return false;
+        }
+        if (tcgetattr(res->terminal_fd, &res->original_termios) < 0) {
+            perror("mysh: failed to get original termios");
+			return false;
+        }
+
+		return true;
+    }
+
+	return false;
 }
 
 int is_terminal_char(char c) {
@@ -126,7 +167,7 @@ int mysh_loop(mysh_resource* res) {
 
         char** args = mysh_split_line(input_buf);
 
-        status = mysh_execute(args);
+        status = mysh_execute(res, args);
 
         free(args);
 	} while(status == 0);

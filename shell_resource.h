@@ -6,12 +6,18 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <errno.h>
+#include <termios.h>
+#include <sys/types.h>
 
 #include "mystring.h"
 
 typedef struct mysh_resource_tag {
     mysh_string current_dir;
     mysh_string home_dir;
+    struct termios original_termios;
+    int terminal_fd;
+    bool is_interactive;
+    pid_t group_id;
 } mysh_resource;
 
 static mysh_resource mysh_shell_resource;
@@ -50,26 +56,6 @@ static void mysh_set_curdir_name(mysh_resource* res, const char* name) {
     else {
         ms_assign_raw(&res->current_dir, name);
     }
-}
-
-// returns false on error
-static bool mysh_init_resource(mysh_resource* res) {
-    ms_init(&res->current_dir, "");
-    ms_init(&res->home_dir, getenv("HOME"));
-
-    if (errno != 0) {
-        perror("mysh");
-        return false;
-    }
-
-    mysh_set_curdir_name(res, get_current_dir_name());
-
-    if (errno != 0) {
-        perror("mysh");
-        return false;
-    }
-
-    return true;
 }
 
 static void mysh_release_resource(mysh_resource* res) {
