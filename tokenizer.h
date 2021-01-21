@@ -12,7 +12,7 @@
 
 typedef enum {
 	token_string,
-	token_jobcontrol,
+	token_background,
 	token_pipe,
 	token_redirect
 } mysh_token;
@@ -22,11 +22,19 @@ typedef struct {
 	void* data;
 } mysh_tokenized_component;
 
+typedef enum {
+	redirect_out,
+	redirect_in,
+	redirect_out_append,
+	redirect_fd
+} mysh_redirect;
+
 typedef struct {
 	int ffd;
 	int tfd;
-	mysh_string* str;
-} mysh_redirect_component;
+	mysh_string* filename;
+	mysh_redirect kind;
+} mysh_redirect_data;
 
 void free_tokenized_component(mysh_tokenized_component* com) {
 	if (com == NULL)
@@ -35,14 +43,14 @@ void free_tokenized_component(mysh_tokenized_component* com) {
 	if (com->token == token_string) {
 		ms_free(com->data);
 	}
-	if (com->token == token_jobcontrol) {
-		ms_free(com->data);
+	if (com->token == token_background) {
+        // do nothing
 	}
 	if (com->token == token_pipe) {
 		// do nothing
 	}
 	if (com->token == token_redirect) {
-		ms_free(((mysh_redirect_component*)com->data)->str);
+		ms_free(((mysh_redirect_data*)com->data)->filename);
 		free(com->data);
 	}
 
@@ -55,36 +63,36 @@ typedef struct {
 	char last_char;
 } mysh_cursor;
 
-static int mysh_cursor_isend(mysh_cursor* parser) {
-	return parser->last_char == '\0';
+static int mysh_cursor_isend(mysh_cursor* cursor) {
+	return cursor->last_char == '\0';
 }
 
-static char mysh_cursor_consume(mysh_cursor* parser) {
-	assert(parser != NULL);
+static char mysh_cursor_consume(mysh_cursor* cursor) {
+	assert(cursor != NULL);
 
-	if (parser->last_char == 0)
+	if (cursor->last_char == 0)
 		return 0;
 
-	parser->last_char = parser->input[parser->pos];
-	if (parser->last_char == EOF) {
-		parser->last_char = 0;
+	cursor->last_char = cursor->input[cursor->pos];
+	if (cursor->last_char == EOF) {
+		cursor->last_char = 0;
 	}
-	++parser->pos;
+	++cursor->pos;
 	
-	return parser->last_char;
+	return cursor->last_char;
 }
 
-static char mysh_cursor_rollback(mysh_cursor* parser) {
-	assert(parser != NULL);
-	assert(parser->pos > 0);
+static char mysh_cursor_rollback(mysh_cursor* cursor) {
+	assert(cursor != NULL);
+	assert(cursor->pos > 0);
 
-	--parser->pos;
-	parser->last_char = parser->input[parser->pos];
-	if (parser->last_char == EOF) {
-		parser->last_char = 0;
+	--cursor->pos;
+	cursor->last_char = cursor->input[cursor->pos];
+	if (cursor->last_char == EOF) {
+		cursor->last_char = 0;
 	}
 	
-	return parser->last_char;
+	return cursor->last_char;
 }
 
 static bool mysh_isdelim(char c) {
@@ -97,47 +105,47 @@ static bool mysh_isdelim(char c) {
 	return false;
 }
 
-static char mysh_cursor_skip_delims(mysh_cursor* parser) {
+static char mysh_cursor_skip_delims(mysh_cursor* cursor) {
 	char c;
 	do {
-		c = mysh_cursor_consume(parser);
+		c = mysh_cursor_consume(cursor);
 	} while(c != '\0' && mysh_isdelim(c));
 
 	return c;
 }
 
-static char mysh_cursor_get_escaped(mysh_cursor* parser, bool ignore_last) {
-	if ((ignore_last ? mysh_cursor_consume(parser) : parser->last_char) == '\\') {
-		if (mysh_cursor_consume(parser) == 0)
+static char mysh_cursor_get_escaped(mysh_cursor* cursor, bool ignore_last) {
+	if ((ignore_last ? mysh_cursor_consume(cursor) : cursor->last_char) == '\\') {
+		if (mysh_cursor_consume(cursor) == 0)
 			return 0;
 		
-		switch (parser->last_char) {
+		switch (cursor->last_char) {
 			case 'n':
 				return '\n';
 			case 't':
 				return '\t';
 			default:
-				return parser->last_char;
+				return cursor->last_char;
 		}
 	}
 	else
-		return parser->last_char;
+		return cursor->last_char;
 }
 
-static const char* mysh_expand_env(mysh_cursor* parser) {
+static const char* mysh_expand_env(mysh_cursor* cursor) {
 	mysh_string* var_name = ms_new();
 	ms_init(var_name, "");
 
-	char c = mysh_cursor_consume(parser);
+	char c = mysh_cursor_consume(cursor);
 	while (isalnum(c) || c == '_') {
 		ms_push(var_name, c);
-		c = mysh_cursor_consume(parser);
+		c = mysh_cursor_consume(cursor);
 	}
 
 	return getenv(var_name->ptr);
 }
 
-static mysh_tokenized_component* mysh_tokenize_string(mysh_cursor* parser) {
+static mysh_tokenized_component* mysh_tokenize_string(mysh_cursor* cursor) {
 	mysh_tokenized_component* ret = (mysh_tokenized_component*)malloc(sizeof(mysh_tokenized_component));
 	if (ret == NULL) {
 		fprintf(stderr, "mysh: error occurred in allocation.\n");
@@ -145,27 +153,27 @@ static mysh_tokenized_component* mysh_tokenize_string(mysh_cursor* parser) {
 	}
 
 	mysh_string* s = ms_new();
-	if (mysh_cursor_isend(parser)) {
+	if (mysh_cursor_isend(cursor)) {
 		ms_init(s, "");
 		ret->token = token_string;
 		ret->data = s;
 		return ret;
 	}
 
-	bool is_quoted = parser->last_char == '"' || parser->last_char == '\'';
-	char quote = (parser->last_char == '"' ? '"' : '\'');
+	bool is_quoted = cursor->last_char == '"' || cursor->last_char == '\'';
+	char quote = (cursor->last_char == '"' ? '"' : '\'');
 
-	char c = (is_quoted ? mysh_cursor_consume(parser) : parser->last_char);
-	while (!mysh_cursor_isend(parser) && (is_quoted ? parser->last_char != quote : !mysh_isdelim(c))) {
+	char c = (is_quoted ? mysh_cursor_consume(cursor) : cursor->last_char);
+	while (!mysh_cursor_isend(cursor) && (is_quoted ? cursor->last_char != quote : !mysh_isdelim(c))) {
 		if (c == '\\') {
-			ms_push(s, mysh_cursor_get_escaped(parser, false));
+			ms_push(s, mysh_cursor_get_escaped(cursor, false));
 		}
 		else if (c == '$') {
-			const char *var = mysh_expand_env(parser);
+			const char *var = mysh_expand_env(cursor);
 			ms_append_raw(s, (var != NULL ? var : ""));
 		}
 		else if (c == '<' || c == '>') {
-			mysh_cursor_rollback(parser);
+			mysh_cursor_rollback(cursor);
 			break;
 		}
 		else if (!is_quoted && (c == '"' || c == '\'')) {
@@ -176,7 +184,7 @@ static mysh_tokenized_component* mysh_tokenize_string(mysh_cursor* parser) {
 			ms_push(s, c);
 		}
 
-		c = mysh_cursor_consume(parser);
+		c = mysh_cursor_consume(cursor);
 	};
 
 	ret->token = token_string;
@@ -185,8 +193,8 @@ static mysh_tokenized_component* mysh_tokenize_string(mysh_cursor* parser) {
 	return ret;
 }
 
-static mysh_tokenized_component* mysh_tokenize_pipe(mysh_cursor* parser) {
-	if (parser->last_char != '|') {
+static mysh_tokenized_component* mysh_tokenize_pipe(mysh_cursor* cursor) {
+	if (cursor->last_char != '|') {
 		return NULL;
 	}
 	
@@ -202,87 +210,72 @@ static mysh_tokenized_component* mysh_tokenize_pipe(mysh_cursor* parser) {
 	return ret;
 }
 
-static mysh_tokenized_component* mysh_tokenize_jobcontrol(mysh_cursor* parser) {
-	mysh_string* s = ms_new();
-
-	switch (parser->last_char) {
-		case ';':
-			ms_assign_raw(s, ";");
-			break;
-		case '&':
-			if (mysh_cursor_consume(parser) == '&') {
-				ms_assign_raw(s, "&&");
-			}
-			else {
-				ms_assign_raw(s, "&");
-				mysh_cursor_rollback(parser);
-			}
-			break;
-		default:
-			ms_free(s);
-			return NULL;
-	}
-
+static mysh_tokenized_component* mysh_tokenize_background(mysh_cursor* cursor) {
 	mysh_tokenized_component* ret = (mysh_tokenized_component*)malloc(sizeof(mysh_tokenized_component));
 	if (ret == NULL) {
 		fprintf(stderr, "mysh: error occurred in allocation.\n");
         exit(EXIT_FAILURE);
 	}
 
-	ret->token = token_jobcontrol;
-	ret->data = s;
+	ret->token = token_background;
+	ret->data = NULL;
 
 	return ret;
 }
 
-static mysh_tokenized_component* mysh_tokenize_redirect(mysh_cursor* parser) {
-	mysh_string* s = ms_new();
-
+// filename will not be set
+static mysh_tokenized_component* mysh_tokenize_redirect(mysh_cursor* cursor) {
 	int ffd = -1, tfd = -1;
-	while (isdigit(parser->last_char)) {
+	while (isdigit(cursor->last_char)) {
 		if (ffd == -1) {
 			ffd = 0;
 		}
 
 		ffd *= 10;
-		ffd += parser->last_char - '0';
-		mysh_cursor_consume(parser);
+		ffd += cursor->last_char - '0';
+		mysh_cursor_consume(cursor);
 	}
 
-	switch (parser->last_char) {
+	mysh_redirect kind;
+	switch (cursor->last_char) {
 		case '>':
-			if (mysh_cursor_consume(parser) == '>') {
-				ms_assign_raw(s, ">>");
+			if (mysh_cursor_consume(cursor) == '>') {
+				kind = redirect_out_append;
 			}
-			else if (parser->last_char == '&') {
-				ms_assign_raw(s, ">&");
-				while (isdigit(mysh_cursor_consume(parser))) {
+			else if (cursor->last_char == '&') {
+				kind = redirect_fd;
+				while (isdigit(mysh_cursor_consume(cursor))) {
 					if (tfd == -1) {
 						tfd = 0;
 					}
 
 					tfd *= 10;
-					tfd += parser->last_char - '0';
+					tfd += cursor->last_char - '0';
 				}
 
 				if (tfd == -1) {
-					mysh_cursor_rollback(parser);
+					return NULL;
+				}
+				if (ffd == -1) {
+					ffd = 1;
 				}
 			}
 			else {
-				ms_assign_raw(s, ">");
-				mysh_cursor_rollback(parser);
+				kind = redirect_out;
+				if (ffd == -1) {
+					ffd = 1;
+				}
+				mysh_cursor_rollback(cursor);
 			}
 			break;
 		case '<':
-			ms_assign_raw(s, "<");
+			kind = redirect_in;
 			break;
 		default:
-			ms_free(s);
 			return NULL;
 	}
 
-	mysh_redirect_component* data = (mysh_redirect_component*)malloc(sizeof(mysh_redirect_component));
+	mysh_redirect_data* data = (mysh_redirect_data*)malloc(sizeof(mysh_redirect_data));
 
 	mysh_tokenized_component* ret = (mysh_tokenized_component*)malloc(sizeof(mysh_tokenized_component));
 	if (data == NULL || ret == NULL) {
@@ -292,12 +285,75 @@ static mysh_tokenized_component* mysh_tokenize_redirect(mysh_cursor* parser) {
 
 	data->ffd = ffd;
 	data->tfd = tfd;
-	data->str = s;
+	data->filename = ms_new();
+	data->kind = kind;
 
 	ret->token = token_redirect;
 	ret->data = data;
 
 	return ret;
+}
+
+static mysh_tokenized_component** mysh_tokenize(char* line, int* written_size) {
+	int capacity = 8;
+	int size = 0;
+	mysh_tokenized_component** components = (mysh_tokenized_component**)malloc(sizeof(void*) * capacity);
+	if (components == NULL) {
+		return NULL;
+	}
+
+	mysh_cursor cursor;
+	cursor.input = line;
+	cursor.pos = 0;
+
+	while (!mysh_cursor_isend(&cursor)) {
+		char c = mysh_cursor_skip_delims(&cursor);
+
+		if (c == 0) {
+			break;
+		}
+
+		mysh_tokenized_component* com;
+		if (c == '|'){
+			com = mysh_tokenize_pipe(&cursor);
+		} if ('&') {
+			com = mysh_tokenize_background(&cursor);
+		}
+		else if (isdigit(c)) {
+			int pos = cursor.pos;
+			com = mysh_tokenize_redirect(&cursor);
+			if (com == NULL) {
+				cursor.pos = pos;
+				cursor.last_char = c;
+				com = mysh_tokenize_string(&cursor);
+			}
+		}
+		else if (c == '<' || c == '>') {
+			com = mysh_tokenize_redirect(&cursor);
+		}
+		else {
+			com = mysh_tokenize_string(&cursor);
+		}
+
+		if (com == NULL) {
+			for (int i = 0; i < size; ++i) {
+				free_tokenized_component(components[i]);
+			}
+
+			return NULL;
+		}
+
+		if (capacity < size + 1) {
+			capacity *= 2;
+			components = (mysh_tokenized_component**)realloc(components, sizeof(void*) * capacity);
+		}
+		components[size] = com;
+		++size;
+	}
+
+	*written_size = size;
+
+	return components;
 }
 
 #endif // MYSH_TOKENIZER_H
