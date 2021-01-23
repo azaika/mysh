@@ -1,14 +1,15 @@
 #ifndef MYSH_TOKENIZER_H
 #define MYSH_TOKENIZER_H
 
-#include "mystring.h"
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 #include <assert.h>
 #include <ctype.h>
+
+#include "mystring.h"
+#include "redirect.h"
 
 typedef enum {
 	token_string,
@@ -21,20 +22,6 @@ typedef struct {
 	mysh_token token;
 	void* data;
 } mysh_tokenized_component;
-
-typedef enum {
-	redirect_out,
-	redirect_in,
-	redirect_out_append,
-	redirect_fd
-} mysh_redirect;
-
-typedef struct {
-	int ffd;
-	int tfd;
-	mysh_string* filename;
-	mysh_redirect kind;
-} mysh_redirect_data;
 
 void free_tokenized_component(mysh_tokenized_component* com) {
 	if (com == NULL)
