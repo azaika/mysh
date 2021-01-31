@@ -92,4 +92,12 @@ static bool mysh_close_file(mysh_redirect_data* red) {
     return true;
 }
 
+static void mysh_release_redirect(mysh_redirect_data* red) {
+    if (red->filename != NULL) {
+        ms_free(red->filename);
+    }
+
+    free(red);
+}
+
 #endif // MYSH_REDIRECT_H
