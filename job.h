@@ -208,37 +208,6 @@ static bool mysh_launch_job(mysh_resource* res, mysh_job* job, bool is_foregroun
     return true;
 }
 
-static mysh_job* mysh_list_and_clear_jobs(mysh_resource* res, mysh_job* first_job) {
-    mysh_job* cur_job;
-    bool is_first = true;
-    while (cur_job != NULL) {
-        mysh_job* next_job = cur_job->next;
-        if (mysh_is_job_completed(cur_job)) {
-            mysh_fprint_job(stdout, cur_job, "completed");
-            if (is_first) {
-                first_job = next_job;
-            }
-            else {
-                next_job = cur_job->next;
-            }
-
-            mysh_release_job(cur_job);
-        }
-        else if (mysh_is_job_stopped(cur_job) && !cur_job->is_notified) {
-            mysh_fprint_job(stdout, cur_job, "stopped");
-            cur_job->is_notified = true;
-            is_first = false;
-        }
-        else {
-            is_first = false;
-        }
-
-        cur_job = next_job;
-    }
-
-    return first_job;
-}
-
 static bool mysh_resume_job(mysh_resource* res, mysh_job* job, bool is_foreground) {
     if (mysh_is_job_completed(job) || !mysh_is_job_stopped(job)) {
         return true;

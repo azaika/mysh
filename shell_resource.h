@@ -18,6 +18,7 @@ typedef struct mysh_resource_tag {
     int terminal_fd;
     bool is_interactive;
     pid_t group_id;
+    void* first_job;
 } mysh_resource;
 
 static void mysh_set_curdir_name(mysh_resource* res, const char* name) {

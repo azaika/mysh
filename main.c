@@ -24,6 +24,7 @@ bool mysh_init(mysh_resource* res) {
         return false;
     }
     
+	res->first_job = NULL;
     res->terminal_fd = STDIN_FILENO;
     res->is_interactive = isatty(res->terminal_fd);
 
@@ -100,7 +101,7 @@ int mysh_read_line(char* buf, size_t buf_size) {
 
 #define MYSH_MAX_INPUT_BYTES (8096)
 
-int mysh_loop(mysh_resource* res, mysh_job* first_job) {
+int mysh_loop(mysh_resource* res) {
 	char* input_buf = malloc(sizeof(char) * MYSH_MAX_INPUT_BYTES);
 	if (input_buf == NULL) {
 		fprintf(stderr, "mysh: error occurred in allocation.\n");
@@ -148,9 +149,10 @@ int mysh_loop(mysh_resource* res, mysh_job* first_job) {
 			continue;
 		}
 		
-		mysh_job* job = first_job;
-		if (job == NULL) {
-			job = mysh_new_job();
+		mysh_job* job = res->first_job;
+		if (res->first_job == NULL) {
+			res->first_job = mysh_new_job();
+			job = res->first_job;
 		}
 		else {
 			while (job->next != NULL) {
@@ -189,8 +191,7 @@ int main(void) {
 		return EXIT_FAILURE;
 	}
 	
-	mysh_job* first_job = NULL;
-	int loop_err = mysh_loop(&res, first_job);
+	int loop_err = mysh_loop(&res);
 	if (loop_err) {
 		fprintf(stderr, "mysh: error occurred in loop process.\n");
 		return EXIT_FAILURE;

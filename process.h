@@ -93,7 +93,7 @@ static void mysh_exec_process(mysh_resource* res, mysh_process* proc, pid_t grou
 
     if (in_fd != STDIN_FILENO) {
         if (dup2(in_fd, STDIN_FILENO) < 0) {
-            perror("mysh: failed to duplicate FD:");
+            perror("mysh: failed to duplicate FD");
             exit(EXIT_FAILURE);
         }
         close(in_fd);
@@ -113,14 +113,14 @@ static void mysh_exec_process(mysh_resource* res, mysh_process* proc, pid_t grou
 
         if (red->kind != redirect_fd) {
             if (close(red->ffd) < 0) {
-                perror("mysh: failed to close FD:");
+                perror("mysh: failed to close FD");
                 exit(EXIT_FAILURE);
             }
         }
     }
 
     execvp(proc->argv[0], proc->argv);
-    perror("mysh: failed to call execvp():");
+    perror("mysh: failed to call execvp()");
     exit(EXIT_FAILURE);
 }
 
