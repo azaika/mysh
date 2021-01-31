@@ -16,8 +16,8 @@ static const char* builtin_str[] = {
     "exit"
 };
 
-static int mysh_cd(mysh_resource* res, char** args);
-static int mysh_exit(mysh_resource* res, char** args);
+static int mysh_cd(mysh_resource* res, char** argv);
+static int mysh_exit(mysh_resource* res, char** argv);
 
 static int (*const builtin_func[]) (mysh_resource*, char**) = {
     mysh_cd,
@@ -28,12 +28,12 @@ static int mysh_num_builtins() {
     return sizeof(builtin_str) / sizeof(char*);
 }
 
-int mysh_cd(mysh_resource* res, char** args) {
-	if (args[1] == NULL) {
+int mysh_cd(mysh_resource* res, char** argv) {
+	if (argv[1] == NULL) {
 		return 0;
 	}
 
-	int err = chdir(args[1]);
+	int err = chdir(argv[1]);
 	if (err) {
 		perror("mysh");
 	}
@@ -44,7 +44,7 @@ int mysh_cd(mysh_resource* res, char** args) {
     return 0;
 }
 
-int mysh_exit(mysh_resource* res, char** args) {
+int mysh_exit(mysh_resource* res, char** argv) {
     return 1;
 }
 
