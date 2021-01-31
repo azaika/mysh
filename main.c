@@ -10,13 +10,14 @@
 
 #include <stdbool.h>
 
+#include "job.h"
 #include "parser.h"
 #include "shell_resource.h"
 #include "builtins.h"
 
 bool mysh_init(mysh_resource* res) {
-	ms_init(&res->current_dir, "");
     ms_init(&res->home_dir, getenv("HOME"));
+	mysh_set_curdir_name(res, get_current_dir_name());
 
     if (errno < 0) {
         perror("mysh: couldn't get $HOME");
@@ -59,6 +60,14 @@ bool mysh_init(mysh_resource* res) {
 	return false;
 }
 
+static void mysh_update(mysh_job* first_job) {
+    int code;
+    pid_t pid;
+    do {
+        pid = waitpid(WAIT_ANY, &code, WUNTRACED | WNOHANG);
+    } while(!mysh_set_status(first_job, pid, code));
+}
+
 int is_terminal_char(char c) {
 	return c == '\n' || c == EOF;
 }
@@ -89,45 +98,9 @@ int mysh_read_line(char* buf, size_t buf_size) {
 	return 0;
 }
 
-int mysh_launch(char** args) {
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("mysh");
-    }
-    else if (pid == 0) { // child
-        if (execvp(args[0], args) == -1) {
-            perror("mysh");
-        }
-
-        exit(EXIT_FAILURE);
-    }
-    else { // parent
-        int status;
-        do {
-            waitpid(pid, &status, WUNTRACED);
-        } while(!WIFEXITED(status) && !WIFSIGNALED(status));
-    }
-
-    return 0;
-}
-
-int mysh_execute(mysh_resource* res, char** args) {
-    if (args == NULL || args[0] == NULL) {
-        return 0;
-    }
-
-    for (int i = 0; i < mysh_num_builtins(); ++i) {
-        if (strcmp(args[0], builtin_str[i]) == 0) {
-            return (*builtin_func[i])(res, args);
-        }
-    }
-
-    return mysh_launch(args);
-}
-
 #define MYSH_MAX_INPUT_BYTES (8096)
 
-int mysh_loop(mysh_resource* res) {
+int mysh_loop(mysh_resource* res, mysh_job* first_job) {
 	char* input_buf = malloc(sizeof(char) * MYSH_MAX_INPUT_BYTES);
 	if (input_buf == NULL) {
 		fprintf(stderr, "mysh: error occurred in allocation.\n");
@@ -136,40 +109,68 @@ int mysh_loop(mysh_resource* res) {
 
 	int status = 0;
 	do {
-		printf("%s$ ", res->current_dir);
+		printf("%s$ ", res->current_dir.ptr);
 		int read_err = mysh_read_line(input_buf, MYSH_MAX_INPUT_BYTES);
 		if (read_err) {
 			fprintf(stderr, "mysh: error occurred while reading input (input ignored).\n");
 			continue;
 		}
 
-		mysh_tokenized_component** coms = mysh_parse_input(input_buf);
-		if (coms == NULL) {
+		if (input_buf[0] == '\0') {
+			exit(EXIT_SUCCESS);
+		}
+
+		mysh_process* proc = mysh_new_process();
+		bool is_foreground;
+		if (!mysh_parse_input(input_buf, proc, &is_foreground)) {
 			fprintf(stderr, "mysh: parse error (input ignored).\n");
+			continue;
 		}
-		for (int i = 0; coms[i] != NULL; ++i) {
-			if (coms[i]->token == token_string) {
-				printf("token_string: %s\n", ((mysh_string*)coms[i]->data)->ptr);
+
+		bool is_builtin = false;
+		for (int i = 0; i < mysh_num_builtins(); ++i) {
+			assert(proc->argv != NULL);
+			if (strcmp(proc->argv[0], builtin_str[i]) == 0) {
+				if (proc->next != NULL) {
+					fprintf(stderr, "mysh: builtin functions cannot call with other command\n");
+				}
+				else if ((builtin_func[i])(res, proc->argv) != 0) {
+					exit(EXIT_SUCCESS);
+				}
+
+				mysh_release_process(proc);
+				is_builtin = true;
+				i = mysh_num_builtins();
 			}
-			else if (coms[i]->token == token_jobcontrol) {
-				printf("token_jobcontrol: %s\n", ((mysh_string*)coms[i]->data)->ptr);
-			}
-			else if (coms[i]->token == token_pipe) {
-				printf("token_pipe: |\n");
-			}
-			else {
-				printf("token_redirect: %s\n", ((mysh_redirect_data*)coms[i]->data)->str->ptr);
-			}
-			free_tokenized_component(coms[i]);
 		}
-		free(coms);
-		continue;
 
-        char** args = mysh_split_line(input_buf);
+		if (is_builtin) {
+			continue;
+		}
+		
+		mysh_job* job = first_job;
+		if (job == NULL) {
+			job = mysh_new_job();
+		}
+		else {
+			while (job->next != NULL) {
+				job = job->next;
+			}
 
-        status = mysh_execute(res, args);
+			job->next = mysh_new_job();
+			job = job->next;
+		}
 
-        free(args);
+		job->first_proc = proc;
+		job->in_fd = STDIN_FILENO;
+		job->out_fd = STDOUT_FILENO;
+		job->err_fd = STDERR_FILENO;
+		job->group_id = res->group_id;
+		job->tmodes = res->original_termios;
+		
+		ms_assign_raw(&job->command, input_buf);
+
+		mysh_launch_job(res, job, is_foreground);
 	} while(status == 0);
 
 	free(input_buf);
@@ -187,8 +188,9 @@ int main(void) {
 		fprintf(stderr, "mysh: error occurred in initialization process.\n");
 		return EXIT_FAILURE;
 	}
-
-	int loop_err = mysh_loop(&res);
+	
+	mysh_job* first_job = NULL;
+	int loop_err = mysh_loop(&res, first_job);
 	if (loop_err) {
 		fprintf(stderr, "mysh: error occurred in loop process.\n");
 		return EXIT_FAILURE;

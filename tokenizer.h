@@ -228,6 +228,8 @@ static mysh_tokenized_component* mysh_tokenize_redirect(mysh_cursor* cursor) {
 		case '>':
 			if (mysh_cursor_consume(cursor) == '>') {
 				kind = redirect_out_append;
+				tfd = ffd;
+				ffd = -1;
 			}
 			else if (cursor->last_char == '&') {
 				kind = redirect_fd;
@@ -249,9 +251,8 @@ static mysh_tokenized_component* mysh_tokenize_redirect(mysh_cursor* cursor) {
 			}
 			else {
 				kind = redirect_out;
-				if (ffd == -1) {
-					ffd = 1;
-				}
+				tfd = ffd;
+				ffd = -1;
 				mysh_cursor_rollback(cursor);
 			}
 			break;
@@ -282,14 +283,19 @@ static mysh_tokenized_component* mysh_tokenize_redirect(mysh_cursor* cursor) {
 }
 
 static mysh_tokenized_component** mysh_tokenize(char* line, int* written_size) {
+	assert(line != NULL);
+	assert(written_size != NULL);
+
 	int capacity = 8;
 	int size = 0;
 	mysh_tokenized_component** components = (mysh_tokenized_component**)malloc(sizeof(void*) * capacity);
 	if (components == NULL) {
-		return NULL;
+		fprintf(stderr, "mysh: error occurred in allocation.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	mysh_cursor cursor;
+	cursor.last_char = -1;
 	cursor.input = line;
 	cursor.pos = 0;
 
@@ -301,9 +307,10 @@ static mysh_tokenized_component** mysh_tokenize(char* line, int* written_size) {
 		}
 
 		mysh_tokenized_component* com;
-		if (c == '|'){
+		if (c == '|') {
 			com = mysh_tokenize_pipe(&cursor);
-		} if ('&') {
+		}
+		else if (c == '&') {
 			com = mysh_tokenize_background(&cursor);
 		}
 		else if (isdigit(c)) {

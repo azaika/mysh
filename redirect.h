@@ -29,7 +29,7 @@ static bool mysh_open_file(mysh_redirect_data* red) {
         assert(!ms_is_empty(red->filename));
 
         red->tfd = 0;
-        red->ffd = open(red->filename->ptr, O_RDONLY);
+        red->ffd = open(red->filename->ptr, O_RDONLY, 0666);
         if (red->ffd < 0) {
             perror("mysh: failed to open output file to redirect:");
             return false;
@@ -42,7 +42,7 @@ static bool mysh_open_file(mysh_redirect_data* red) {
         if (red->tfd == -1) {
             red->tfd = 1;
         }
-        red->ffd = open(red->filename->ptr, O_WRONLY | O_CREAT | O_TRUNC);
+        red->ffd = open(red->filename->ptr, O_WRONLY | O_CREAT | O_TRUNC, 0666);
         if (red->ffd < 0) {
             perror("mysh: failed to open output file to redirect:");
             return false;
@@ -55,7 +55,7 @@ static bool mysh_open_file(mysh_redirect_data* red) {
         if (red->tfd == -1) {
             red->tfd = 1;
         }
-        red->ffd = open(red->filename->ptr, O_WRONLY | O_CREAT | O_APPEND);
+        red->ffd = open(red->filename->ptr, O_WRONLY | O_CREAT | O_APPEND, 0666);
         if (red->ffd < 0) {
             perror("mysh: failed to open output file to redirect:");
             return false;

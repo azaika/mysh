@@ -24,13 +24,32 @@ struct mysh_job_tag {
 
 typedef struct mysh_job_tag mysh_job;
 
+static mysh_job* mysh_new_job() {
+    mysh_job* job = (mysh_job*)malloc(sizeof(mysh_job));
+    if (job == NULL) {
+        fprintf(stderr, "mysh: error occurred in allocation.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    job->next = NULL;
+    ms_init(&job->command, "");
+    job->first_proc = NULL;
+    job->group_id = 0;
+    job->is_notified = false;
+    job->in_fd = -1;
+    job->out_fd = -1;
+    job->err_fd = -1;
+
+    return job;
+}
+
 static void mysh_release_job(mysh_job* job) {
     mysh_release_process(job->first_proc);
     free(job);
 }
 
-static void mysh_fprint_job(FILE* file, mysh_job* job, mysh_string* status) {
-    fprintf(file, "%ld (%s): %s\n", job->group_id, status, job->command);
+static void mysh_fprint_job(FILE* file, mysh_job* job, const char* status) {
+    fprintf(file, "%d (%s): %s\n", job->group_id, status, job->command.ptr);
 }
 
 static mysh_job* mysh_find_job(mysh_job* job, pid_t group_id) {
@@ -65,7 +84,8 @@ static bool mysh_is_job_completed(mysh_job* job) {
     return true;
 }
 
-bool mysh_set_status(mysh_job* first_job, pid_t pid, int code) {
+static bool mysh_set_status(mysh_job* first_job, pid_t pid, int code) {
+    printf("%d\n", pid);
     assert(pid >= 0);
 
     if (pid == 0 || errno == ECHILD) {
@@ -93,20 +113,12 @@ bool mysh_set_status(mysh_job* first_job, pid_t pid, int code) {
     return false;
 }
 
-void mysh_wait_job (mysh_resource* res, mysh_job* job) {
+static void mysh_wait_job(mysh_resource* res, mysh_job* job) {
     int code;
     pid_t pid;
     do {
-        pid = waitpid (WAIT_ANY, &code, WUNTRACED);
-    } while (!mysh_set_status(job, pid, code) && !mysh_is_job_stopped(job) && !mysh_is_job_completed(job));
-}
-
-void mysh_update(mysh_resource* res) {
-    int code;
-    pid_t pid;
-    do {
-        pid = waitpid(WAIT_ANY, &code, WUNTRACED | WNOHANG);
-    } while(!mysh_set_status(res, pid, code));
+        pid = waitpid(WAIT_ANY, &code, WUNTRACED);
+    } while (pid >= 0 && !mysh_set_status(job, pid, code) && !mysh_is_job_stopped(job) && !mysh_is_job_completed(job));
 }
 
 static void mysh_put_job_foreground(mysh_resource* res, mysh_job* job, bool do_continue) {
@@ -126,8 +138,8 @@ static void mysh_put_job_foreground(mysh_resource* res, mysh_job* job, bool do_c
     tcsetattr(res->terminal_fd, TCSADRAIN, &res->original_termios);
 }
 
-static bool mysh_launch_job(mysh_resource* res, mysh_job* job, bool is_interactive, bool is_foreground) {
-    assert(job !=NULL);
+static bool mysh_launch_job(mysh_resource* res, mysh_job* job, bool is_foreground) {
+    assert(job != NULL);
 
     int in_fd = job->in_fd;
     for (mysh_process* proc = job->first_proc; proc != NULL; proc = proc->next) {
@@ -163,7 +175,7 @@ static bool mysh_launch_job(mysh_resource* res, mysh_job* job, bool is_interacti
         else {
             // parent
             proc->pid = pid;
-            if (is_interactive) {
+            if (res->is_interactive) {
                 if (job->group_id != 0) {
                     job->group_id = pid;
                 }
@@ -203,7 +215,7 @@ static mysh_job* mysh_list_and_clear_jobs(mysh_resource* res, mysh_job* first_jo
         mysh_job* next_job = cur_job->next;
         if (mysh_is_job_completed(cur_job)) {
             mysh_fprint_job(stdout, cur_job, "completed");
-            if (true) {
+            if (is_first) {
                 first_job = next_job;
             }
             else {
@@ -247,6 +259,5 @@ static bool mysh_resume_job(mysh_resource* res, mysh_job* job, bool is_foregroun
 
     return true;
 }
-
 
 #endif // MYSH_JOB_H

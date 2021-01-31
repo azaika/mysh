@@ -20,8 +20,6 @@ typedef struct mysh_resource_tag {
     pid_t group_id;
 } mysh_resource;
 
-static mysh_resource mysh_shell_resource;
-
 static void mysh_set_curdir_name(mysh_resource* res, const char* name) {
     if (name == NULL) {
         return;

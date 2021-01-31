@@ -51,15 +51,23 @@ static mysh_process* mysh_new_process() {
 }
 
 static void mysh_release_process(mysh_process* proc) {
+    assert(proc != NULL);
+
+    if (proc->next != NULL) {
+        mysh_release_process(proc->next);
+    }
+
     for (int i = 0; i < proc->num_redirects; ++i) {
         mysh_release_redirect(&proc->redirects[i]);
     }
+    
     for (int i = 0; i < proc->argc; ++i) {
         free(proc->argv[i]);
     }
 
     free(proc->redirects);
     free(proc->argv);
+    free(proc);
 }
 
 static void mysh_exec_process(mysh_resource* res, mysh_process* proc, pid_t group_id, int in_fd, int out_fd, int err_fd, bool is_foreground) {

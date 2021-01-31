@@ -210,7 +210,9 @@ static char* ms_into_chars(mysh_string* str) {
     }
 
     char* ptr = str->ptr;
-    free(str);
+    str->ptr = NULL;
+    str->length = 0;
+    str->capacity = 0;
 
     return ptr;
 }
