@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdbool.h>
 
 typedef struct mysh_string_tag {
     char* ptr;
@@ -12,8 +13,16 @@ typedef struct mysh_string_tag {
     size_t capacity;
 } mysh_string;
 
+static bool ms_is_empty(mysh_string* s) {
+    return s->ptr == NULL || s->ptr[0] == '\0';
+}
+
 static size_t ms_reserve(mysh_string* s, size_t len) {
     assert(s != NULL);
+
+    if (s->ptr == NULL) {
+        s->capacity = 8;
+    }
     
     while (s->capacity < len + 1) {
         s->capacity *= 2;
