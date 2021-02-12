@@ -18,7 +18,7 @@ struct mysh_job_tag {
     mysh_process* first_proc;
     pid_t group_id;
     bool is_notified;
-    struct termios tmodes;
+    struct termios termios;
     int in_fd, out_fd, err_fd;
 };
 
@@ -84,8 +84,7 @@ static bool mysh_is_job_completed(mysh_job* job) {
     return true;
 }
 
-static bool mysh_set_status(mysh_job* first_job, pid_t pid, int code) {
-    printf("%d\n", pid);
+static bool mysh_set_status(mysh_job* first_job, pid_t pid, int status) {
     assert(pid >= 0);
 
     if (pid == 0 || errno == ECHILD) {
@@ -95,9 +94,9 @@ static bool mysh_set_status(mysh_job* first_job, pid_t pid, int code) {
     for (mysh_job* job = first_job; job != NULL; job = job->next) {
         for (mysh_process* proc = job->first_proc; proc != NULL; proc = proc->next) {
             if (proc->pid == pid) {
-                proc->status = code;
+                proc->status = status;
 
-                if (WIFSTOPPED(code)) {
+                if (WIFSTOPPED(status)) {
                     proc->is_stopped = true;
                 }
                 else {
@@ -113,32 +112,42 @@ static bool mysh_set_status(mysh_job* first_job, pid_t pid, int code) {
     return false;
 }
 
-static void mysh_wait_job(mysh_resource* res, mysh_job* job) {
+static void mysh_update_status(mysh_job* first_job) {
     int code;
     pid_t pid;
     do {
-        pid = waitpid(WAIT_ANY, &code, WUNTRACED);
-    } while (pid >= 0 && !mysh_set_status(job, pid, code) && !mysh_is_job_stopped(job) && !mysh_is_job_completed(job));
+        pid = waitpid(WAIT_ANY, &code, WUNTRACED | WNOHANG);
+    } while(pid >= 0 && !mysh_set_status(first_job, pid, code));
 }
 
-static void mysh_put_job_foreground(mysh_resource* res, mysh_job* job, bool do_continue) {
-    tcsetpgrp(res->terminal_fd, job->group_id);
+static void mysh_wait_job(mysh_resource* shell, mysh_job* job) {
+    int status;
+    pid_t pid;
+    do {
+        pid = waitpid(WAIT_ANY, &status, WUNTRACED);
+    } while (pid >= 0 && !mysh_set_status(job, pid, status) && !mysh_is_job_stopped(job) && !mysh_is_job_completed(job));
+}
+
+static void mysh_put_job_foreground(mysh_resource* shell, mysh_job* job, bool do_continue) {
+    tcsetpgrp(shell->terminal_fd, job->group_id);
 
     if (do_continue) {
-        tcsetattr(res->terminal_fd, TCSADRAIN, &job->tmodes);
+        tcsetattr(shell->terminal_fd, TCSADRAIN, &job->termios);
 
         if (kill(-job->group_id, SIGCONT) < 0) {
             perror("mysh: failed to send SIGCONT");
         }
     }
 
-    mysh_wait_job(res, job);
-    tcsetpgrp(res->terminal_fd, res->group_id);
-    tcgetattr(res->terminal_fd, &job->tmodes);
-    tcsetattr(res->terminal_fd, TCSADRAIN, &res->original_termios);
+    mysh_wait_job(shell, job);
+
+    tcsetpgrp(shell->terminal_fd, shell->group_id);
+
+    tcgetattr(shell->terminal_fd, &job->termios);
+    tcsetattr(shell->terminal_fd, TCSADRAIN, &shell->original_termios);
 }
 
-static bool mysh_launch_job(mysh_resource* res, mysh_job* job, bool is_foreground) {
+static bool mysh_launch_job(mysh_resource* shell, mysh_job* job, bool is_foreground) {
     assert(job != NULL);
 
     int in_fd = job->in_fd;
@@ -170,13 +179,13 @@ static bool mysh_launch_job(mysh_resource* res, mysh_job* job, bool is_foregroun
         }
         else if (pid == 0) {
             // child
-            mysh_exec_process(res, proc, job->group_id, in_fd, out_fd, job->err_fd, is_foreground);
+            mysh_exec_process(shell, proc, job->group_id, in_fd, out_fd, job->err_fd, is_foreground);
         }
         else {
             // parent
             proc->pid = pid;
-            if (res->is_interactive) {
-                if (job->group_id != 0) {
+            if (shell->is_interactive) {
+                if (job->group_id == 0) {
                     job->group_id = pid;
                 }
 
@@ -199,16 +208,16 @@ static bool mysh_launch_job(mysh_resource* res, mysh_job* job, bool is_foregroun
         in_fd = cur_pipe[0];
     }
 
-    if (res->is_interactive) {
-        mysh_wait_job(res, job);
+    if (!shell->is_interactive) {
+        mysh_wait_job(shell, job);
     } else if (is_foreground) {
-        mysh_put_job_foreground(res, job, false);
+        mysh_put_job_foreground(shell, job, false);
     }
 
     return true;
 }
 
-static bool mysh_resume_job(mysh_resource* res, mysh_job* job, bool is_foreground) {
+static bool mysh_resume_job(mysh_resource* shell, mysh_job* job, bool is_foreground) {
     if (mysh_is_job_completed(job) || !mysh_is_job_stopped(job)) {
         return true;
     }
@@ -219,7 +228,7 @@ static bool mysh_resume_job(mysh_resource* res, mysh_job* job, bool is_foregroun
     job->is_notified = false;
 
     if (is_foreground) {
-        mysh_put_job_foreground(res, job, true);
+        mysh_put_job_foreground(shell, job, true);
     }
     else if (kill(- job->group_id, SIGCONT) < 0) {
         perror("mysh: failed to send SIGCONT: ");

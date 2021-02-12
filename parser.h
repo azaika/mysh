@@ -20,7 +20,7 @@ static bool mysh_parse_tokens(mysh_tokenized_component** coms, int size, mysh_pr
 		if (coms[i]->token == token_background) {
 			if (i + 1 != size) {
 				mysh_release_process(top);
-				fprintf(stderr, "mysh: '&' must be placed in end of line\n");
+				fprintf(stderr, "mysh: '&' must be placed in the end of line\n");
 				return false;
 			}
 			else {

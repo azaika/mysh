@@ -15,23 +15,28 @@
 #include "shell_resource.h"
 #include "builtins.h"
 
-bool mysh_init(mysh_resource* res) {
-    ms_init(&res->home_dir, getenv("HOME"));
-	mysh_set_curdir_name(res, get_current_dir_name());
+bool mysh_init(mysh_resource* shell) {
+    ms_init(&shell->home_dir, getenv("HOME"));
+	mysh_set_curdir_name(shell, get_current_dir_name());
 
     if (errno < 0) {
         perror("mysh: couldn't get $HOME");
         return false;
     }
     
-	res->first_job = NULL;
-    res->terminal_fd = STDIN_FILENO;
-    res->is_interactive = isatty(res->terminal_fd);
+	shell->first_job = NULL;
+    shell->terminal_fd = STDIN_FILENO;
+    shell->is_interactive = isatty(shell->terminal_fd);
 
-    if (res->is_interactive) {
-        for (pid_t p = getpgrp(); p != tcgetpgrp(res->terminal_fd); p = getpgrp()) {
-            kill(-res->group_id, SIGTTIN);
-        }
+    if (shell->is_interactive) {
+		while(true) {
+			shell->group_id = getpgrp();
+			if (tcgetpgrp(shell->terminal_fd) == shell->group_id) {
+				break;
+			}
+
+			kill(-shell->group_id, SIGTTIN);
+		}
 
 		signal(SIGINT, SIG_IGN);
 		signal(SIGQUIT, SIG_IGN);
@@ -40,17 +45,17 @@ bool mysh_init(mysh_resource* res) {
 		signal(SIGTTOU, SIG_IGN);
 		signal(SIGCHLD, SIG_IGN);
 
-        res->group_id = getpid();
-        if (setpgid(res->group_id, res->group_id) < 0) {
+        shell->group_id = getpid();
+        if (setpgid(shell->group_id, shell->group_id) < 0) {
             perror("mysh: couldn't set the shell in its own process group");
-            return false;
+            exit(EXIT_FAILURE);
         }
 
-        if (tcsetpgrp(res->terminal_fd, res->group_id) < -1) {
+        if (tcsetpgrp(shell->terminal_fd, shell->group_id) < 0) {
             perror("mysh: couldn't make the shell foreground");
             return false;
         }
-        if (tcgetattr(res->terminal_fd, &res->original_termios) < 0) {
+        if (tcgetattr(shell->terminal_fd, &shell->original_termios) < 0) {
             perror("mysh: failed to get original termios");
 			return false;
         }
@@ -61,19 +66,11 @@ bool mysh_init(mysh_resource* res) {
 	return false;
 }
 
-static void mysh_update(mysh_job* first_job) {
-    int code;
-    pid_t pid;
-    do {
-        pid = waitpid(WAIT_ANY, &code, WUNTRACED | WNOHANG);
-    } while(!mysh_set_status(first_job, pid, code));
-}
-
 int is_terminal_char(char c) {
 	return c == '\n' || c == EOF;
 }
 
-int mysh_read_line(char* buf, size_t buf_size) {
+bool mysh_read_line(char* buf, size_t buf_size) {
 	size_t cur = 0;
 	while (1) {
 		char c = getchar();
@@ -84,24 +81,29 @@ int mysh_read_line(char* buf, size_t buf_size) {
 				c = getchar();
 			}
 			
-			return 1;
+			return false;
 		}
 
-		if (is_terminal_char(c)) {
+		if (c == '\n') {
 			buf[cur] = '\0';
 			break;
 		}
-		
+
+		if (c == EOF) {
+			buf[cur] = EOF;
+			break;
+		}
+
 		buf[cur] = c;
 		++cur;
 	}
-	
-	return 0;
+
+	return true;
 }
 
 #define MYSH_MAX_INPUT_BYTES (8096)
 
-int mysh_loop(mysh_resource* res) {
+int mysh_loop(mysh_resource* shell) {
 	char* input_buf = malloc(sizeof(char) * MYSH_MAX_INPUT_BYTES);
 	if (input_buf == NULL) {
 		fprintf(stderr, "mysh: error occurred in allocation.\n");
@@ -110,21 +112,19 @@ int mysh_loop(mysh_resource* res) {
 
 	int status = 0;
 	do {
-		printf("%s$ ", res->current_dir.ptr);
-		int read_err = mysh_read_line(input_buf, MYSH_MAX_INPUT_BYTES);
-		if (read_err) {
+		printf("%s$ ", shell->current_dir.ptr);
+		if (!mysh_read_line(input_buf, MYSH_MAX_INPUT_BYTES)) {
 			fprintf(stderr, "mysh: error occurred while reading input (input ignored).\n");
 			continue;
 		}
 
-		if (input_buf[0] == '\0') {
+		if (input_buf[0] == EOF) {
 			exit(EXIT_SUCCESS);
 		}
 
 		mysh_process* proc = mysh_new_process();
 		bool is_foreground;
 		if (!mysh_parse_input(input_buf, proc, &is_foreground)) {
-			fprintf(stderr, "mysh: parse error (input ignored).\n");
 			continue;
 		}
 
@@ -135,7 +135,7 @@ int mysh_loop(mysh_resource* res) {
 				if (proc->next != NULL) {
 					fprintf(stderr, "mysh: builtin functions cannot call with other command\n");
 				}
-				else if ((builtin_func[i])(res, proc->argv) != 0) {
+				else if ((builtin_func[i])(shell, proc->argv) != 0) {
 					exit(EXIT_SUCCESS);
 				}
 
@@ -149,10 +149,10 @@ int mysh_loop(mysh_resource* res) {
 			continue;
 		}
 		
-		mysh_job* job = res->first_job;
-		if (res->first_job == NULL) {
-			res->first_job = mysh_new_job();
-			job = res->first_job;
+		mysh_job* job = shell->first_job;
+		if (shell->first_job == NULL) {
+			shell->first_job = mysh_new_job();
+			job = shell->first_job;
 		}
 		else {
 			while (job->next != NULL) {
@@ -167,37 +167,37 @@ int mysh_loop(mysh_resource* res) {
 		job->in_fd = STDIN_FILENO;
 		job->out_fd = STDOUT_FILENO;
 		job->err_fd = STDERR_FILENO;
-		job->group_id = res->group_id;
-		job->tmodes = res->original_termios;
+		job->group_id = 0;
+		job->termios = shell->original_termios;
 		
 		ms_assign_raw(&job->command, input_buf);
 
-		mysh_launch_job(res, job, is_foreground);
+		mysh_launch_job(shell, job, is_foreground);
 	} while(status == 0);
 
 	free(input_buf);
 	return 0;
 }
 
-bool mysh_terminate(mysh_resource* res) {
-	mysh_release_resource(res);
+bool mysh_terminate(mysh_resource* shell) {
+	mysh_release_resource(shell);
 	return true;
 }
 
 int main(void) {
-	mysh_resource res;
-	if (!mysh_init(&res)) {
+	mysh_resource shell;
+	if (!mysh_init(&shell)) {
 		fprintf(stderr, "mysh: error occurred in initialization process.\n");
 		return EXIT_FAILURE;
 	}
 	
-	int loop_err = mysh_loop(&res);
+	int loop_err = mysh_loop(&shell);
 	if (loop_err) {
 		fprintf(stderr, "mysh: error occurred in loop process.\n");
 		return EXIT_FAILURE;
 	}
 
-	if (!mysh_terminate(&res)) {
+	if (!mysh_terminate(&shell)) {
 		fprintf(stderr, "mysh: error occurred in loop process.\n");
 		return EXIT_FAILURE;
 	}

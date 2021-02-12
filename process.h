@@ -70,17 +70,17 @@ static void mysh_release_process(mysh_process* proc) {
     free(proc);
 }
 
-static void mysh_exec_process(mysh_resource* res, mysh_process* proc, pid_t group_id, int in_fd, int out_fd, int err_fd, bool is_foreground) {
-    if (res->is_interactive) {
+static void mysh_exec_process(mysh_resource* shell, mysh_process* proc, pid_t group_id, int in_fd, int out_fd, int err_fd, bool is_foreground) {
+    if (shell->is_interactive) {
         pid_t pid = getpid();
 
-        if (res->group_id == 0) {
-            res->group_id = pid;
+        if (group_id == 0) {
+            group_id = pid;
         }
 
-        setpgid(pid, res->group_id);
+        setpgid(pid, group_id);
         if (is_foreground) {
-            tcsetpgrp(res->terminal_fd, res->group_id);
+            tcsetpgrp(shell->terminal_fd, group_id);
         }
 
         signal(SIGINT, SIG_DFL);
@@ -96,14 +96,23 @@ static void mysh_exec_process(mysh_resource* res, mysh_process* proc, pid_t grou
             perror("mysh: failed to duplicate FD");
             exit(EXIT_FAILURE);
         }
+
         close(in_fd);
     }
     if (out_fd != STDOUT_FILENO) {
-        dup2(out_fd, STDOUT_FILENO);
+        if (dup2(out_fd, STDOUT_FILENO) < 0) {
+            perror("mysh: failed to duplicate FD");
+            exit(EXIT_FAILURE);
+        }
+
         close(out_fd);
     }
     if (err_fd != STDERR_FILENO) {
-        dup2(err_fd, STDERR_FILENO);
+        if (dup2(err_fd, STDERR_FILENO) < 0) {
+            perror("mysh: failed to duplicate FD");
+            exit(EXIT_FAILURE);
+        }
+        
         close(err_fd);
     }
 
