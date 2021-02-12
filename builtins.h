@@ -80,6 +80,7 @@ int mysh_jobs(mysh_resource* shell, char** argv) {
             prev_job = cur_job;
         }
         else {
+            mysh_fprint_job(stdout, cur_job, "running");
             prev_job = cur_job;
         }
 

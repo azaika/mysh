@@ -117,7 +117,7 @@ static void mysh_update_status(mysh_job* first_job) {
     pid_t pid;
     do {
         pid = waitpid(WAIT_ANY, &code, WUNTRACED | WNOHANG);
-    } while(pid >= 0 && !mysh_set_status(first_job, pid, code));
+    } while(pid >= 0 && mysh_set_status(first_job, pid, code));
 }
 
 static void mysh_wait_job(mysh_resource* shell, mysh_job* job) {
@@ -125,7 +125,7 @@ static void mysh_wait_job(mysh_resource* shell, mysh_job* job) {
     pid_t pid;
     do {
         pid = waitpid(WAIT_ANY, &status, WUNTRACED);
-    } while (pid >= 0 && !mysh_set_status(job, pid, status) && !mysh_is_job_stopped(job) && !mysh_is_job_completed(job));
+    } while (pid >= 0 && mysh_set_status(shell->first_job, pid, status) && !mysh_is_job_stopped(job) && !mysh_is_job_completed(job));
 }
 
 static void mysh_put_job_foreground(mysh_resource* shell, mysh_job* job, bool do_continue) {
