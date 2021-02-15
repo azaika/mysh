@@ -134,8 +134,8 @@ int mysh_loop(mysh_resource* shell) {
 				if (proc->next != NULL) {
 					fprintf(stderr, "mysh: builtin functions cannot call with other command\n");
 				}
-				else if ((builtin_func[i])(shell, proc->argv) != 0) {
-					exit(EXIT_SUCCESS);
+				else {
+					status = (builtin_func[i])(shell, proc->argv);
 				}
 
 				mysh_release_process(proc);

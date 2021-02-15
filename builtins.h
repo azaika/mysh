@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -17,7 +18,8 @@ static const char* builtin_str[] = {
     "exit",
 	"jobs",
     "fg",
-    "bg"
+    "bg",
+    "mug"
 };
 
 static int mysh_cd(mysh_resource* shell, char** argv);
@@ -25,13 +27,15 @@ static int mysh_exit(mysh_resource* shell, char** argv);
 static int mysh_jobs(mysh_resource* shell, char** argv);
 static int mysh_fg(mysh_resource* shell, char** argv);
 static int mysh_bg(mysh_resource* shell, char** argv);
+static int mysh_mug(mysh_resource* shell, char** argv);
 
 static int (*const builtin_func[]) (mysh_resource*, char**) = {
     mysh_cd,
     mysh_exit,
 	mysh_jobs,
     mysh_fg,
-    mysh_bg
+    mysh_bg,
+    mysh_mug
 };
 
 static int mysh_num_builtins() {
@@ -166,6 +170,27 @@ int mysh_bg(mysh_resource* shell, char** argv) {
     }
 
 	return 0;
+}
+
+int mysh_mug(mysh_resource* shell, char** argv) {
+    const char* strs[] = {
+        "Wanna take a break?",
+        "Coffee or tea?",
+        "Would you like some coffee?",
+        "A cup of hot milk at night brings good sleep for you",
+        "Hot chocolate!"
+    };
+
+    printf("\n");
+    printf("  (  (  (\n");
+    printf("   )  )  )\n");
+    printf("|...........|___\n");
+    printf("|           |  /   %s\n", strs[time(NULL) % (sizeof(strs) / sizeof(char*))]);
+    printf("|           |_/\n");
+    printf(" \\_________/\n");
+    printf("\n");
+
+    return 0;
 }
 
 #endif // MYSH_BUILTINS_H
