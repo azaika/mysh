@@ -1,5 +1,3 @@
-#define _GNU_SOURCE
-
 // standard library
 #include <stdlib.h>
 #include <stdio.h>
@@ -19,7 +17,7 @@
 
 bool mysh_init(mysh_resource* shell) {
     ms_init(&shell->home_dir, getenv("HOME"));
-	mysh_set_curdir_name(shell, get_current_dir_name());
+	mysh_set_curdir_name(shell);
 
     if (errno < 0) {
         perror("mysh: couldn't get $HOME");

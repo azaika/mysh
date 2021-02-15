@@ -21,7 +21,9 @@ typedef struct mysh_resource_tag {
     void* first_job;
 } mysh_resource;
 
-static void mysh_set_curdir_name(mysh_resource* shell, const char* name) {
+static void mysh_set_curdir_name(mysh_resource* shell) {
+
+    char* name = getcwd(NULL, 0);
     if (name == NULL) {
         return;
     }
@@ -55,6 +57,8 @@ static void mysh_set_curdir_name(mysh_resource* shell, const char* name) {
     else {
         ms_assign_raw(&shell->current_dir, name);
     }
+
+    free(name);
 }
 
 static void mysh_release_resource(mysh_resource* shell) {
