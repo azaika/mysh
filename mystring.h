@@ -109,32 +109,32 @@ static void ms_assign_raw(mysh_string* str, const char* src) {
     strcpy(str->ptr, src);
 }
 
-static void ms_shrink(mysh_string* s) {
-    assert(s != NULL);
+// static void ms_shrink(mysh_string* s) {
+//     assert(s != NULL);
 
-    while (s->length * 2 < s->capacity) {
-        s->capacity /= 2;
-    }
+//     while (s->length * 2 < s->capacity) {
+//         s->capacity /= 2;
+//     }
 
-    s->ptr = realloc(s->ptr, s->capacity * sizeof(char));
+//     s->ptr = realloc(s->ptr, s->capacity * sizeof(char));
 
-    if (s->ptr == NULL) {
-        fprintf(stderr, "mysh: error occurred in allocation.\n");
-        exit(EXIT_FAILURE);
-    }
-}
+//     if (s->ptr == NULL) {
+//         fprintf(stderr, "mysh: error occurred in allocation.\n");
+//         exit(EXIT_FAILURE);
+//     }
+// }
 
-static void ms_clear(mysh_string* s) {
-    assert(s != NULL);
+// static void ms_clear(mysh_string* s) {
+//     assert(s != NULL);
 
-    if (s->ptr == NULL) {
-        ms_init(s, "");
-    }
-    else {
-        s->ptr[0] = '\0';
-        s->length = 0;
-    }
-}
+//     if (s->ptr == NULL) {
+//         ms_init(s, "");
+//     }
+//     else {
+//         s->ptr[0] = '\0';
+//         s->length = 0;
+//     }
+// }
 
 static void ms_relase(mysh_string* s) {
     assert(s != NULL);
@@ -168,23 +168,23 @@ static void ms_push(mysh_string* s, char c) {
     ++s->length;
 }
 
-static void ms_append(mysh_string* s1, const mysh_string* s2) {
-    assert(s1 != NULL && s2 != NULL);
+// static void ms_append(mysh_string* s1, const mysh_string* s2) {
+//     assert(s1 != NULL && s2 != NULL);
 
-    if (s2->ptr == NULL) {
-        return;
-    }
-    if (s1->ptr == NULL) {
-        ms_init(s1, s2->ptr);
-        return;
-    }
+//     if (s2->ptr == NULL) {
+//         return;
+//     }
+//     if (s1->ptr == NULL) {
+//         ms_init(s1, s2->ptr);
+//         return;
+//     }
 
-    ms_reserve(s1, s1->length + s2->length);
+//     ms_reserve(s1, s1->length + s2->length);
 
-    strcpy(s1->ptr + s1->length, s2->ptr);
+//     strcpy(s1->ptr + s1->length, s2->ptr);
 
-    s1->length += s2->length;
-}
+//     s1->length += s2->length;
+// }
 
 static void ms_append_raw(mysh_string* str, const char* src) {
     assert(str != NULL && src != NULL);
