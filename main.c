@@ -43,7 +43,6 @@ bool mysh_init(mysh_resource* shell) {
 		signal(SIGTSTP, SIG_IGN);
 		signal(SIGTTIN, SIG_IGN);
 		signal(SIGTTOU, SIG_IGN);
-		signal(SIGCHLD, SIG_IGN);
 
         shell->group_id = getpid();
         if (setpgid(shell->group_id, shell->group_id) < 0) {
