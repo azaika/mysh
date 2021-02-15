@@ -22,7 +22,6 @@ typedef struct mysh_resource_tag {
 } mysh_resource;
 
 static void mysh_set_curdir_name(mysh_resource* shell) {
-
     char* name = getcwd(NULL, 0);
     if (name == NULL) {
         return;

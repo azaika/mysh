@@ -189,6 +189,7 @@ bool mysh_terminate(mysh_resource* shell) {
 
 int main(void) {
 	mysh_resource shell;
+	memset(&shell, 0, sizeof(shell));
 	if (!mysh_init(&shell)) {
 		fprintf(stderr, "mysh: error occurred in initialization process.\n");
 		return EXIT_FAILURE;
