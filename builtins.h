@@ -61,10 +61,11 @@ int mysh_jobs(mysh_resource* shell, char** argv) {
     
     mysh_job* cur_job = shell->first_job;
     mysh_job* prev_job = NULL;
+    int idx = 1;
     while (cur_job != NULL) {
         mysh_job* next_job = cur_job->next;
         if (mysh_is_job_completed(cur_job)) {
-            mysh_fprint_job(stdout, cur_job, "completed");
+            mysh_fprint_job(stdout, cur_job, "completed", idx);
             if (prev_job == NULL) {
                 shell->first_job = next_job;
             }
@@ -75,15 +76,16 @@ int mysh_jobs(mysh_resource* shell, char** argv) {
             mysh_release_job(cur_job);
         }
         else if (mysh_is_job_stopped(cur_job) && !cur_job->is_notified) {
-            mysh_fprint_job(stdout, cur_job, "stopped");
+            mysh_fprint_job(stdout, cur_job, "stopped", idx);
             cur_job->is_notified = true;
             prev_job = cur_job;
         }
         else {
-            mysh_fprint_job(stdout, cur_job, "running");
+            mysh_fprint_job(stdout, cur_job, "running", idx);
             prev_job = cur_job;
         }
 
+        ++idx;
         cur_job = next_job;
     }
 

@@ -97,7 +97,9 @@ static void mysh_exec_process(mysh_resource* shell, mysh_process* proc, pid_t gr
             exit(EXIT_FAILURE);
         }
 
-        close(in_fd);
+        if (in_fd != out_fd && in_fd != err_fd) {
+            close(in_fd);
+        }
     }
     if (out_fd != STDOUT_FILENO) {
         if (dup2(out_fd, STDOUT_FILENO) < 0) {
@@ -105,7 +107,9 @@ static void mysh_exec_process(mysh_resource* shell, mysh_process* proc, pid_t gr
             exit(EXIT_FAILURE);
         }
 
-        close(out_fd);
+        if (out_fd != err_fd) {
+            close(out_fd);
+        }
     }
     if (err_fd != STDERR_FILENO) {
         if (dup2(err_fd, STDERR_FILENO) < 0) {

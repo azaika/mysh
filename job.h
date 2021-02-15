@@ -48,8 +48,8 @@ static void mysh_release_job(mysh_job* job) {
     free(job);
 }
 
-static void mysh_fprint_job(FILE* file, mysh_job* job, const char* status) {
-    fprintf(file, "%d (%s): %s\n", job->group_id, status, job->command.ptr);
+static void mysh_fprint_job(FILE* file, mysh_job* job, const char* status, int idx) {
+    fprintf(file, "[%d] %d (%s): %s\n", idx, job->group_id, status, job->command.ptr);
 }
 
 static mysh_job* mysh_find_job(mysh_job* job, pid_t group_id) {

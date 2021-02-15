@@ -50,11 +50,11 @@ bool mysh_init(mysh_resource* shell) {
             perror("mysh: couldn't set the shell in its own process group");
             exit(EXIT_FAILURE);
         }
-
         if (tcsetpgrp(shell->terminal_fd, shell->group_id) < 0) {
             perror("mysh: couldn't make the shell foreground");
             return false;
         }
+
         if (tcgetattr(shell->terminal_fd, &shell->original_termios) < 0) {
             perror("mysh: failed to get original termios");
 			return false;
@@ -180,6 +180,10 @@ int mysh_loop(mysh_resource* shell) {
 }
 
 bool mysh_terminate(mysh_resource* shell) {
+	for (mysh_job* job = shell->first_job; job != NULL; job = job->next) {
+		kill(-job->group_id, SIGTERM);
+	}
+
 	mysh_release_resource(shell);
 	return true;
 }
@@ -194,6 +198,7 @@ int main(void) {
 	int loop_err = mysh_loop(&shell);
 	if (loop_err) {
 		fprintf(stderr, "mysh: error occurred in loop process.\n");
+		mysh_terminate(&shell);
 		return EXIT_FAILURE;
 	}
 
